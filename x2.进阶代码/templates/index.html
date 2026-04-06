@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JY61P 陀螺仪实时监测</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+        
+        h1 {
+            text-align: center;
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+        
+        #status {
+            text-align: center;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            font-weight: bold;
+            font-size: 1.1em;
+            transition: all 0.3s ease;
+        }
+        
+        #status.connected {
+            background: #4caf50;
+            color: white;
+        }
+        
+        #status.disconnected {
+            background: #f44336;
+            color: white;
+        }
+        
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+        
+        .section {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+        
+        .section h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+            text-align: center;
+            font-size: 1.5em;
+        }
+        
+        #model-container {
+            width: 100%;
+            height: 400px;
+            background: #2c3e50;
+            border-radius: 10px;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .data-grid {
+            display: grid;
+            gap: 15px;
+        }
+        
+        .data-row {
+            background: white;
+            padding: 15px;
+            border-radius: 10px;
+            border-left: 4px solid #667eea;
+        }
+        
+        .data-label {
+            font-weight: bold;
+            color: #555;
+            margin-bottom: 8px;
+            font-size: 0.9em;
+        }
+        
+        .data-values {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+        }
+        
+        .data-value {
+            background: #e3f2fd;
+            padding: 10px;
+            border-radius: 5px;
+            text-align: center;
+        }
+        
+        .data-value-label {
+            font-size: 0.8em;
+            color: #666;
+            margin-bottom: 5px;
+        }
+        
+        .data-value-number {
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #1976d2;
+        }
+        
+        .single-value {
+            background: #fff3e0;
+            padding: 15px;
+            border-radius: 5px;
+            text-align: center;
+        }
+        
+        .single-value-number {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #f57c00;
+        }
+        
+        @media (max-width: 1024px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+        
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎯 JY61P 陀螺仪实时监测</h1>
+        <div class="subtitle">6轴姿态传感器 - 实时数据可视化</div>
+        
+        <div id="status" class="disconnected">🔴 未连接</div>
+        
+        <div class="main-content">
+            <!-- 3D模型显示 -->
+            <div class="section">
+                <h2>📐 3D姿态显示</h2>
+                <div id="model-container">
+                    <canvas id="canvas"></canvas>
+                </div>
+            </div>
+            
+            <!-- 角度数据 -->
+            <div class="section">
+                <h2>📊 实时数据</h2>
+                <div class="data-grid">
+                    <!-- 角度 -->
+                    <div class="data-row">
+                        <div class="data-label">🔄 角度 (°)</div>
+                        <div class="data-values">
+                            <div class="data-value">
+                                <div class="data-value-label">Roll (横滚)</div>
+                                <div class="data-value-number" id="angle-roll">0.00</div>
+                            </div>
+                            <div class="data-value">
+                                <div class="data-value-label">Pitch (俯仰)</div>
+                                <div class="data-value-number" id="angle-pitch">0.00</div>
+                            </div>
+                            <div class="data-value">
+                                <div class="data-value-label">Yaw (偏航)</div>
+                                <div class="data-value-number" id="angle-yaw">0.00</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 加速度 -->
+                    <div class="data-row">
+                        <div class="data-label">⚡ 加速度 (g)</div>
+                        <div class="data-values">
+                            <div class="data-value">
+                                <div class="data-value-label">X轴</div>
+                                <div class="data-value-number" id="acc-x">0.00</div>
+                            </div>
+                            <div class="data-value">
+                                <div class="data-value-label">Y轴</div>
+                                <div class="data-value-number" id="acc-y">0.00</div>
+                            </div>
+                            <div class="data-value">
+                                <div class="data-value-label">Z轴</div>
+                                <div class="data-value-number" id="acc-z">0.00</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 角速度 -->
+                    <div class="data-row">
+                        <div class="data-label">🌀 角速度 (°/s)</div>
+                        <div class="data-values">
+                            <div class="data-value">
+                                <div class="data-value-label">X轴</div>
+                                <div class="data-value-number" id="gyro-x">0.00</div>
+                            </div>
+                            <div class="data-value">
+                                <div class="data-value-label">Y轴</div>
+                                <div class="data-value-number" id="gyro-y">0.00</div>
+                            </div>
+                            <div class="data-value">
+                                <div class="data-value-label">Z轴</div>
+                                <div class="data-value-number" id="gyro-z">0.00</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 温度 -->
+                    <div class="data-row">
+                        <div class="data-label">🌡️ 温度</div>
+                        <div class="single-value">
+                            <div class="single-value-number" id="temperature">0.00°C</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 角度折线图 -->
+        <div class="section" style="margin-top: 30px;">
+            <h2>📈 角度趋势图</h2>
+            <div style="background: #2c3e50; border-radius: 10px; padding: 10px;">
+                <canvas id="chart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- 引入Socket.IO -->
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    
+    <!-- 3D渲染脚本 -->
+    <script>
+        // WebSocket连接
+        const socket = io();
+        
+        // 连接状态处理
+        socket.on('connect', function() {
+            console.log('已连接到服务器');
+            document.getElementById('status').textContent = '🟢 已连接';
+            document.getElementById('status').className = 'connected';
+        });
+        
+        socket.on('disconnect', function() {
+            console.log('与服务器断开连接');
+            document.getElementById('status').textContent = '🔴 未连接';
+            document.getElementById('status').className = 'disconnected';
+        });
+        
+        // 历史数据存储（用于折线图）
+        const historyData = {
+            timestamps: [],
+            roll: [],
+            pitch: [],
+            yaw: []
+        };
+        const MAX_DATA_POINTS = 100;  // 最多显示100个数据点
+        
+        // 接收陀螺仪数据
+        socket.on('gyro_data', function(data) {
+            updateDisplay(data);
+            update3DModel(data.angle);
+            updateHistoryData(data.angle);
+            updateChart();
+        });
+        
+        // 更新历史数据
+        function updateHistoryData(angle) {
+            const now = new Date();
+            const timeStr = now.getHours().toString().padStart(2, '0') + ':' + 
+                           now.getMinutes().toString().padStart(2, '0') + ':' + 
+                           now.getSeconds().toString().padStart(2, '0');
+            
+            historyData.timestamps.push(timeStr);
+            historyData.roll.push(angle.roll);
+            historyData.pitch.push(angle.pitch);
+            historyData.yaw.push(angle.yaw);
+            
+            // 限制数据点数量
+            if (historyData.timestamps.length > MAX_DATA_POINTS) {
+                historyData.timestamps.shift();
+                historyData.roll.shift();
+                historyData.pitch.shift();
+                historyData.yaw.shift();
+            }
+        }
+        
+        // 更新数据显示
+        function updateDisplay(data) {
+            // 角度
+            document.getElementById('angle-roll').textContent = data.angle.roll.toFixed(2);
+            document.getElementById('angle-pitch').textContent = data.angle.pitch.toFixed(2);
+            document.getElementById('angle-yaw').textContent = data.angle.yaw.toFixed(2);
+            
+            // 加速度
+            document.getElementById('acc-x').textContent = data.acc.x.toFixed(2);
+            document.getElementById('acc-y').textContent = data.acc.y.toFixed(2);
+            document.getElementById('acc-z').textContent = data.acc.z.toFixed(2);
+            
+            // 角速度
+            document.getElementById('gyro-x').textContent = data.gyro.x.toFixed(2);
+            document.getElementById('gyro-y').textContent = data.gyro.y.toFixed(2);
+            document.getElementById('gyro-z').textContent = data.gyro.z.toFixed(2);
+            
+            // 温度
+            document.getElementById('temperature').textContent = data.temperature.toFixed(2) + '°C';
+        }
+        
+        // 3D模型渲染
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        // 设置canvas大小
+        function resizeCanvas() {
+            const container = document.getElementById('model-container');
+            canvas.width = container.clientWidth;
+            canvas.height = container.clientHeight;
+        }
+        
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+        
+        // 3D立方体顶点
+        const vertices = [
+            [-1, -1, -1], [1, -1, -1], [1, 1, -1], [-1, 1, -1],  // 前面
+            [-1, -1, 1], [1, -1, 1], [1, 1, 1], [-1, 1, 1]       // 后面
+        ];
+        
+        // 立方体边
+        const edges = [
+            [0, 1], [1, 2], [2, 3], [3, 0],  // 前面
+            [4, 5], [5, 6], [6, 7], [7, 4],  // 后面
+            [0, 4], [1, 5], [2, 6], [3, 7]   // 连接前后
+        ];
+        
+        // 立方体面
+        const faces = [
+            [0, 1, 2, 3],  // 前
+            [4, 5, 6, 7],  // 后
+            [0, 1, 5, 4],  // 下
+            [2, 3, 7, 6],  // 上
+            [0, 3, 7, 4],  // 左
+            [1, 2, 6, 5]   // 右
+        ];
+        
+        const faceColors = [
+            'rgba(255, 100, 100, 0.6)',  // 前 - 红色
+            'rgba(100, 100, 255, 0.6)',  // 后 - 蓝色
+            'rgba(100, 255, 100, 0.6)',  // 下 - 绿色
+            'rgba(255, 255, 100, 0.6)',  // 上 - 黄色
+            'rgba(255, 100, 255, 0.6)',  // 左 - 粉色
+            'rgba(100, 255, 255, 0.6)'   // 右 - 青色
+        ];
+        
+        // 旋转矩阵
+        function rotateX(point, angle) {
+            const rad = angle * Math.PI / 180;
+            const cos = Math.cos(rad);
+            const sin = Math.sin(rad);
+            return [
+                point[0],
+                point[1] * cos - point[2] * sin,
+                point[1] * sin + point[2] * cos
+            ];
+        }
+        
+        function rotateY(point, angle) {
+            const rad = angle * Math.PI / 180;
+            const cos = Math.cos(rad);
+            const sin = Math.sin(rad);
+            return [
+                point[0] * cos + point[2] * sin,
+                point[1],
+                -point[0] * sin + point[2] * cos
+            ];
+        }
+        
+        function rotateZ(point, angle) {
+            const rad = angle * Math.PI / 180;
+            const cos = Math.cos(rad);
+            const sin = Math.sin(rad);
+            return [
+                point[0] * cos - point[1] * sin,
+                point[0] * sin + point[1] * cos,
+                point[2]
+            ];
+        }
+        
+        // 投影到2D
+        function project(point) {
+            const scale = 60;
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            
+            const distance = 5;
+            const z = point[2] + distance;
+            const factor = distance / z;
+            
+            return [
+                centerX + point[0] * scale * factor,
+                centerY - point[1] * scale * factor,
+                z
+            ];
+        }
+        
+        // 更新3D模型
+        function update3DModel(angle) {
+            // 清空画布
+            ctx.fillStyle = '#2c3e50';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // 应用旋转
+            const rotatedVertices = vertices.map(v => {
+                let point = [...v];
+                point = rotateX(point, -angle.pitch);  // 负号是为了匹配物理方向
+                point = rotateY(point, angle.yaw);
+                point = rotateZ(point, angle.roll);
+                return point;
+            });
+            
+            // 投影到2D
+            const projectedVertices = rotatedVertices.map(v => project(v));
+            
+            // 计算面的深度并排序（画家算法）
+            const facesWithDepth = faces.map((face, index) => {
+                const avgZ = face.reduce((sum, i) => sum + projectedVertices[i][2], 0) / face.length;
+                return { face, index, depth: avgZ };
+            });
+            
+            facesWithDepth.sort((a, b) => b.depth - a.depth);
+            
+            // 绘制面
+            facesWithDepth.forEach(({ face, index }) => {
+                ctx.beginPath();
+                ctx.moveTo(projectedVertices[face[0]][0], projectedVertices[face[0]][1]);
+                for (let i = 1; i < face.length; i++) {
+                    ctx.lineTo(projectedVertices[face[i]][0], projectedVertices[face[i]][1]);
+                }
+                ctx.closePath();
+                ctx.fillStyle = faceColors[index];
+                ctx.fill();
+            });
+            
+            // 绘制边
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2;
+            edges.forEach(edge => {
+                ctx.beginPath();
+                ctx.moveTo(projectedVertices[edge[0]][0], projectedVertices[edge[0]][1]);
+                ctx.lineTo(projectedVertices[edge[1]][0], projectedVertices[edge[1]][1]);
+                ctx.stroke();
+            });
+            
+            // 绘制坐标轴
+            drawAxes(angle);
+        }
+        
+        // 绘制坐标轴
+        function drawAxes(angle) {
+            const axisLength = 2;
+            const axes = [
+                [[0, 0, 0], [axisLength, 0, 0], '#ff0000', 'X'],  // X轴 - 红色
+                [[0, 0, 0], [0, axisLength, 0], '#00ff00', 'Y'],  // Y轴 - 绿色
+                [[0, 0, 0], [0, 0, axisLength], '#0000ff', 'Z']   // Z轴 - 蓝色
+            ];
+            
+            axes.forEach(([start, end, color, label]) => {
+                // 应用旋转
+                let rotatedStart = [...start];
+                rotatedStart = rotateX(rotatedStart, -angle.pitch);
+                rotatedStart = rotateY(rotatedStart, angle.yaw);
+                rotatedStart = rotateZ(rotatedStart, angle.roll);
+                
+                let rotatedEnd = [...end];
+                rotatedEnd = rotateX(rotatedEnd, -angle.pitch);
+                rotatedEnd = rotateY(rotatedEnd, angle.yaw);
+                rotatedEnd = rotateZ(rotatedEnd, angle.roll);
+                
+                // 投影
+                const projStart = project(rotatedStart);
+                const projEnd = project(rotatedEnd);
+                
+                // 绘制轴
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.moveTo(projStart[0], projStart[1]);
+                ctx.lineTo(projEnd[0], projEnd[1]);
+                ctx.stroke();
+                
+                // 绘制标签
+                ctx.fillStyle = color;
+                ctx.font = 'bold 16px Arial';
+                ctx.fillText(label, projEnd[0] + 10, projEnd[1]);
+            });
+        }
+        
+        // 初始渲染
+        update3DModel({roll: 0, pitch: 0, yaw: 0});
+        
+        // ==================== 折线图部分 ====================
+        const chartCanvas = document.getElementById('chart');
+        const chartCtx = chartCanvas.getContext('2d');
+        
+        // 设置图表canvas大小
+        function resizeChart() {
+            const container = chartCanvas.parentElement;
+            chartCanvas.width = container.clientWidth - 20;
+            chartCanvas.height = 350;
+        }
+        
+        resizeChart();
+        window.addEventListener('resize', resizeChart);
+        
+        // 绘制折线图
+        function updateChart() {
+            if (historyData.timestamps.length === 0) return;
+            
+            const padding = { top: 40, right: 100, bottom: 60, left: 60 };
+            const width = chartCanvas.width - padding.left - padding.right;
+            const height = chartCanvas.height - padding.top - padding.bottom;
+            
+            // 清空画布
+            chartCtx.fillStyle = '#2c3e50';
+            chartCtx.fillRect(0, 0, chartCanvas.width, chartCanvas.height);
+            
+            // 找出Y轴范围
+            const allValues = [...historyData.roll, ...historyData.pitch, ...historyData.yaw];
+            const minY = Math.min(...allValues, -50);
+            const maxY = Math.max(...allValues, 50);
+            const yRange = maxY - minY;
+            
+            // 绘制网格线
+            chartCtx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+            chartCtx.lineWidth = 1;
+            
+            // 横向网格线（每25度一条）
+            for (let i = -150; i <= 150; i += 25) {
+                if (i >= minY && i <= maxY) {
+                    const y = padding.top + height - ((i - minY) / yRange) * height;
+                    chartCtx.beginPath();
+                    chartCtx.moveTo(padding.left, y);
+                    chartCtx.lineTo(padding.left + width, y);
+                    chartCtx.stroke();
+                    
+                    // Y轴刻度标签
+                    chartCtx.fillStyle = '#bbb';
+                    chartCtx.font = '12px Arial';
+                    chartCtx.textAlign = 'right';
+                    chartCtx.fillText(i.toString(), padding.left - 10, y + 4);
+                }
+            }
+            
+            // 绘制X轴和Y轴
+            chartCtx.strokeStyle = '#fff';
+            chartCtx.lineWidth = 2;
+            chartCtx.beginPath();
+            chartCtx.moveTo(padding.left, padding.top);
+            chartCtx.lineTo(padding.left, padding.top + height);
+            chartCtx.lineTo(padding.left + width, padding.top + height);
+            chartCtx.stroke();
+            
+            // X轴标签（时间）- 每隔一定点数显示
+            chartCtx.fillStyle = '#bbb';
+            chartCtx.font = '11px Arial';
+            chartCtx.textAlign = 'center';
+            const labelInterval = Math.max(1, Math.floor(historyData.timestamps.length / 8));
+            for (let i = 0; i < historyData.timestamps.length; i += labelInterval) {
+                const x = padding.left + (i / (historyData.timestamps.length - 1 || 1)) * width;
+                chartCtx.fillText(historyData.timestamps[i], x, chartCanvas.height - 20);
+            }
+            
+            // Y轴标签
+            chartCtx.save();
+            chartCtx.fillStyle = '#fff';
+            chartCtx.font = 'bold 14px Arial';
+            chartCtx.textAlign = 'center';
+            chartCtx.translate(20, chartCanvas.height / 2);
+            chartCtx.rotate(-Math.PI / 2);
+            chartCtx.fillText('角度', 0, 0);
+            chartCtx.restore();
+            
+            // X轴标签
+            chartCtx.fillStyle = '#fff';
+            chartCtx.font = 'bold 14px Arial';
+            chartCtx.textAlign = 'center';
+            chartCtx.fillText('时间', chartCanvas.width / 2, chartCanvas.height - 5);
+            
+            // 绘制三条折线
+            const datasets = [
+                { data: historyData.roll, color: '#1e88e5', label: '角度X' },
+                { data: historyData.pitch, color: '#43a047', label: '角度Y' },
+                { data: historyData.yaw, color: '#e53935', label: '角度Z' }
+            ];
+            
+            datasets.forEach((dataset, idx) => {
+                chartCtx.strokeStyle = dataset.color;
+                chartCtx.lineWidth = 2;
+                chartCtx.beginPath();
+                
+                for (let i = 0; i < dataset.data.length; i++) {
+                    const x = padding.left + (i / (dataset.data.length - 1 || 1)) * width;
+                    const y = padding.top + height - ((dataset.data[i] - minY) / yRange) * height;
+                    
+                    if (i === 0) {
+                        chartCtx.moveTo(x, y);
+                    } else {
+                        chartCtx.lineTo(x, y);
+                    }
+                }
+                
+                chartCtx.stroke();
+                
+                // 绘制图例
+                const legendX = chartCanvas.width - 90;
+                const legendY = padding.top + idx * 25;
+                
+                chartCtx.fillStyle = dataset.color;
+                chartCtx.fillRect(legendX, legendY, 20, 3);
+                
+                chartCtx.fillStyle = '#fff';
+                chartCtx.font = '12px Arial';
+                chartCtx.textAlign = 'left';
+                chartCtx.fillText(dataset.label, legendX + 25, legendY + 4);
+            });
+            
+            // 标题
+            chartCtx.fillStyle = '#fff';
+            chartCtx.font = 'bold 16px Arial';
+            chartCtx.textAlign = 'center';
+            chartCtx.fillText('COM3-角度', chartCanvas.width / 2, 25);
+        }
+        
+        // 初始化图表
+        updateChart();
+    </script>
+</body>
+</html>
+
